@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameInPage, getZineMethod, simulate, ZINE_BLEED, ZINE_METHODS, zineFrameRect, type ZinePanel } from './zine';
+import { frameInPage, getZineMethod, pagesText, pageSizeOf, simulate, ZINE_BLEED, ZINE_METHODS, zineFrameRect, type ZinePanel } from './zine';
 
 const grid = (id: string, side: 0 | 1) => {
   const ps = getZineMethod(id).panels.filter((p) => p.side === side);
@@ -47,7 +47,7 @@ describe('métodos de fanzine', () => {
   });
 
   it('en los cuadernillos, cada hoja lleva sus dos páginas espalda con espalda', () => {
-    for (const id of ['cuadernillo-16', 'cuadernillo-8']) {
+    for (const id of ['cuadernillo-16', 'cuadernillo-8', 'cuadernillo-apaisado-8', 'micro-32']) {
       const m = getZineMethod(id);
       const at = (n: number) => m.panels.find((p) => p.num === n)!;
       for (let n = 1; n < m.pages; n += 2) {
@@ -94,5 +94,30 @@ describe('métodos de fanzine', () => {
     const top: ZinePanel = m.panels.find((p) => p.num === 2)!; // arriba a la derecha, cabeza abajo
     const rt = zineFrameRect(m, top, 0);
     expect(frameInPage(top, rt)).toEqual({ x: -ZINE_BLEED, y: 0, w: top.rect.w + ZINE_BLEED, h: top.rect.h + ZINE_BLEED });
+  });
+
+  it('el cuadernillo apaisado tiene páginas horizontales y el microlibro, verticales', () => {
+    const at = (id: string) => pageSizeOf(getZineMethod(id).panels[0]);
+    expect(at('cuadernillo-apaisado-8')).toEqual({ w: 135, h: 90 });
+    expect(at('micro-32')).toEqual({ w: 45, h: 67.5 });
+    expect(getZineMethod('micro-32').pages).toBe(32);
+  });
+
+  it('el minizine con póster es el minizine más la hoja entera por detrás', () => {
+    const m = getZineMethod('minizine-poster');
+    expect(grid('minizine-poster', 0)).toEqual(grid('minizine-8', 0));
+    expect(m.panels.filter((p) => p.side === 1)).toEqual([expect.objectContaining({ num: 9, rect: { x: 0, y: 0, w: m.trim.w, h: m.trim.h } })]);
+    expect(pagesText(m)).toBe('8 páginas + póster');
+  });
+
+  it('a dos voces, la segunda mitad va girada respecto al minizine', () => {
+    const mini = getZineMethod('minizine-8');
+    const two = getZineMethod('dos-voces-8');
+    for (const p of two.panels) {
+      const q = mini.panels.find((x) => x.num === p.num)!;
+      expect(p.rect).toEqual(q.rect);
+      expect(p.rot).toBe(p.num >= 5 ? (q.rot + 180) % 360 : q.rot);
+    }
+    expect(two.panels.find((p) => p.num === 8)!.name).toBe('Portada B');
   });
 });

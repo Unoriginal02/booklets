@@ -46,7 +46,17 @@ export interface ZineMethod {
   steps: string[];
   /** etiquetas cortas para la tarjeta del método */
   tags: string[];
+  /** número del panel que es un póster con la hoja entera, no una página */
+  poster?: number;
 }
+
+/** «8 páginas», o «8 páginas + póster» */
+export function pagesText(m: ZineMethod): string {
+  return m.poster ? `${m.pages - 1} páginas + póster` : `${m.pages} páginas`;
+}
+
+/** «a», «a y b», «a, b y c» */
+const listText = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
 
 /** El A4 deja sitio alrededor del corte para el sangrado y las marcas. */
 export const ZINE_BLEED = 3;
@@ -266,7 +276,7 @@ function fromSimulation(spec: SimSpec): ZineMethod {
   ];
   if (!spec.singleSided && sim.closedEdges.length) {
     const map = { cabeza: 'el de arriba (cabeza)', corte: 'el de la derecha (corte)', pie: 'el de abajo (pie)' };
-    steps.push(`Abre con un cúter los bordes que quedan cerrados por un doblez, ${sim.closedEdges.map((e) => map[e]).join(' y ')}, para separar las páginas. Si quieres, recorta 1 mm.`);
+    steps.push(`Abre con un cúter los bordes que quedan cerrados por un doblez, ${listText(sim.closedEdges.map((e) => map[e]))}, para separar las páginas. Si quieres, recorta 1 mm.`);
   }
   steps.push(spec.binding);
   return {
@@ -324,8 +334,95 @@ function minizine(): ZineMethod {
   };
 }
 
+/**
+ * El minizine con un póster en el reverso: doblado no se ve, y al desplegarlo del todo
+ * y darle la vuelta aparece la hoja entera como una sola imagen.
+ */
+function minizinePoster(): ZineMethod {
+  const base = minizine();
+  const { trim } = base;
+  return {
+    ...base,
+    id: 'minizine-poster',
+    name: 'Minizine con póster',
+    summary: 'El minizine de siempre con un secreto: al desplegarlo del todo, por detrás aparece un póster con la hoja entera.',
+    sides: 2,
+    pages: 9,
+    poster: 9,
+    panels: [...base.panels, { side: 1, rect: rect(0, 0, trim.w, trim.h), num: 9, name: 'Póster · por dentro', rot: 0 }],
+    steps: [
+      'Imprime a doble cara, volteando por el borde corto, al 100 %. Recorta la hoja por las marcas de corte.',
+      'Pon la hoja con la cara A (las ocho páginas) hacia arriba.',
+      ...base.steps.slice(1),
+      'Para ver el póster, despliégalo del todo y dale la vuelta. El corte del centro lo cruza: no pongas ahí nada importante.',
+    ],
+    tags: ['8 páginas + póster', `${trim.w / 4}×${trim.h / 2} mm`, 'doble cara', '1 corte', 'sin grapas'],
+  };
+}
+
+/**
+ * Tête-bêche: dos fanzines de cuatro páginas en uno. La segunda mitad va girada 180°, así
+ * que dándole la vuelta, la contraportada es la portada B y las dos lecturas se encuentran
+ * en la doble central, cabeza con pie.
+ */
+function twoVoices(): ZineMethod {
+  const base = minizine();
+  const names: Record<number, string> = {
+    1: 'Portada A',
+    2: 'A · pág. 2',
+    3: 'A · pág. 3',
+    4: 'A · pág. 4 · centro',
+    5: 'B · pág. 4 · centro',
+    6: 'B · pág. 3',
+    7: 'B · pág. 2',
+    8: 'Portada B',
+  };
+  return {
+    ...base,
+    id: 'dos-voces-8',
+    name: 'Fanzine a dos voces',
+    summary: 'Dos portadas, una en cada extremo: se lee desde un lado o desde el otro y las dos historias se encuentran en el centro.',
+    panels: base.panels.map((p) => ({ ...p, name: names[p.num], rot: (p.num >= 5 ? (p.rot + 180) % 360 : p.rot) as Rot })),
+    steps: [
+      ...base.steps.slice(0, -1),
+      'Sigue empujando hasta formar una cruz de cuatro alas y ciérrala con la portada A (1) delante. Dale la vuelta y gíralo media vuelta: lo que era la contraportada es la portada B (8).',
+    ],
+    tags: ['2 × 4 páginas', ...base.tags.slice(1)],
+  };
+}
+
 export const ZINE_METHODS: ZineMethod[] = [
   minizine(),
+  minizinePoster(),
+  twoVoices(),
+  fromSimulation({
+    id: 'cuadernillo-8',
+    name: 'Cuadernillo de 8 páginas',
+    summary: 'La hoja doblada dos veces en cruz. Se abre la cabeza y se grapa por el lomo.',
+    orientation: 'portrait',
+    cols: 2,
+    rows: 2,
+    folds: [
+      { axis: 'y', keep: 'high', over: true },
+      { axis: 'x', keep: 'low', over: true },
+    ],
+    binding: 'Grapa o cose por el lomo, que es el último doblez.',
+    tags: ['8 páginas', '90×135 mm', 'doble cara', 'abrir cabeza', 'grapa'],
+  }),
+  fromSimulation({
+    id: 'cuadernillo-apaisado-8',
+    name: 'Cuadernillo apaisado de 8 páginas',
+    summary: 'Como el de 8, pero con las páginas en horizontal: para fotos apaisadas a buen tamaño.',
+    orientation: 'landscape',
+    cols: 2,
+    rows: 2,
+    folds: [
+      { axis: 'y', keep: 'high', over: true },
+      { axis: 'x', keep: 'low', over: true },
+    ],
+    binding: 'Grapa o cose por el lomo, que es el último doblez.',
+    tags: ['8 páginas', '135×90 mm', 'doble cara', 'abrir cabeza', 'grapa'],
+  }),
   fromSimulation({
     id: 'cuadernillo-16',
     name: 'Cuadernillo de 16 páginas',
@@ -342,18 +439,20 @@ export const ZINE_METHODS: ZineMethod[] = [
     tags: ['16 páginas', '67,5×90 mm', 'doble cara', 'abrir bordes', 'grapa'],
   }),
   fromSimulation({
-    id: 'cuadernillo-8',
-    name: 'Cuadernillo de 8 páginas',
-    summary: 'La hoja doblada dos veces en cruz. Se abre la cabeza y se grapa por el lomo.',
+    id: 'micro-32',
+    name: 'Microlibro de 32 páginas',
+    summary: 'Cuatro dobleces y un librito diminuto de 32 páginas que cabe en la palma de la mano. Mejor en papel fino.',
     orientation: 'portrait',
-    cols: 2,
-    rows: 2,
+    cols: 4,
+    rows: 4,
     folds: [
       { axis: 'y', keep: 'high', over: true },
       { axis: 'x', keep: 'low', over: true },
+      { axis: 'y', keep: 'high', over: true },
+      { axis: 'x', keep: 'low', over: true },
     ],
-    binding: 'Grapa o cose por el lomo, que es el último doblez.',
-    tags: ['8 páginas', '90×135 mm', 'doble cara', 'abrir cabeza', 'grapa'],
+    binding: 'Grapa o cose por el lomo, que es el último doblez. Con tantas capas, ayúdate de una regla para marcar cada pliegue.',
+    tags: ['32 páginas', '45×67,5 mm', 'doble cara', 'abrir bordes', 'grapa'],
   }),
   fromSimulation({
     id: 'frances-4',

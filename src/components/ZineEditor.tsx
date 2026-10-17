@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { download, fileSafe, runPdf } from '../lib/exportPdf';
 import { LOW_PPI, placePhoto } from '../model/geometry';
 import { frameUses } from '../model/uses';
-import { duplexEdge, getZineMethod, paperFor, pageSizeOf, ZINE_METHODS, zineFrames } from '../model/zine';
+import { duplexEdge, getZineMethod, paperFor, pageSizeOf, ZINE_METHODS, pagesText, zineFrames } from '../model/zine';
 import type { Photo } from '../model/types';
 import { merging, useEditor } from '../store/editor';
 import { EditorHeader } from './EditorHeader';
@@ -89,7 +89,7 @@ function ZineCanvas({ photos }: { photos: Map<string, Photo> }) {
           </label>
         )}
         <span className="text-xs text-stone-500">
-          {method.pages} páginas · {method.sides === 1 ? 'una cara' : 'doble cara'} · A4 {method.orientation === 'landscape' ? 'apaisado' : 'vertical'}
+          {pagesText(method)} · {method.sides === 1 ? 'una cara' : 'doble cara'} · A4 {method.orientation === 'landscape' ? 'apaisado' : 'vertical'}
         </span>
       </div>
       <div ref={ref} className="relative min-h-0 flex-1 overflow-auto" onClick={(e) => e.target === e.currentTarget && useEditor.getState().arm(null)}>
@@ -154,7 +154,7 @@ function ZineInspector() {
             <p className="text-sm font-semibold">{method.name}</p>
             <p className="mt-0.5 text-xs text-stone-600">{method.summary}</p>
             <p className="mt-1.5 text-xs text-stone-500">
-              {method.pages} páginas de unos {fmt(page.w)} × {fmt(page.h)} mm · {method.sides === 1 ? 'una cara' : 'doble cara'}
+              {pagesText(method)} de unos {fmt(page.w)} × {fmt(page.h)} mm · {method.sides === 1 ? 'una cara' : 'doble cara'}
             </p>
             {hidden > 0 && (
               <p className="mt-2 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-900">

@@ -1,5 +1,5 @@
 import { useEditor } from '../store/editor';
-import { frameInPage, linesFor, pageSizeOf, zineFrames, type ZineMethod, type ZinePanel } from '../model/zine';
+import { frameInPage, getZineMethod, linesFor, pageSizeOf, zineFrames, type ZineMethod, type ZinePanel } from '../model/zine';
 import type { Booklet, Photo } from '../model/types';
 import { FrameView } from './FrameView';
 import { PhotoImg } from './PhotoImg';
@@ -86,12 +86,15 @@ export function ZineSheet({ booklet, method, side, k, photos, interactive, guide
 /** Las páginas en orden de lectura y del derecho: así quedará el fanzine doblado. */
 export function FoldedPreview({ booklet, photos, height }: { booklet: Booklet; photos: Map<string, Photo>; height: number }) {
   const frames = zineFrames(booklet).sort((a, b) => a.panel.num - b.panel.num);
-  const maxH = Math.max(...frames.map((z) => pageSizeOf(z.panel).h));
-  const k = height / maxH;
+  const poster = getZineMethod(booklet.zine?.methodId).poster;
+  const maxH = Math.max(...frames.filter((z) => z.panel.num !== poster).map((z) => pageSizeOf(z.panel).h));
+  const pageK = height / maxH;
   return (
     <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-6">
       {frames.map((z) => {
         const page = pageSizeOf(z.panel);
+        // el póster es la hoja entera: se muestra algo mayor que una página, no a escala
+        const k = z.panel.num === poster ? (1.4 * height) / page.h : pageK;
         const inner = frameInPage(z.panel, z.rect);
         const photo = z.frame.photoId ? photos.get(z.frame.photoId) : undefined;
         return (
@@ -130,7 +133,7 @@ export function MethodIcon({ method, height = 54 }: { method: ZineMethod; height
               const cy = p.rect.y + p.rect.h / 2;
               return (
                 <g key={p.num}>
-                  <rect x={p.rect.x} y={p.rect.y} width={p.rect.w} height={p.rect.h} fill={p.num === 1 ? '#fed7aa' : 'transparent'} stroke="#d6d3d1" strokeWidth={1} />
+                  <rect x={p.rect.x} y={p.rect.y} width={p.rect.w} height={p.rect.h} fill={p.num === 1 ? '#fed7aa' : p.num === method.poster ? '#e7e5e4' : 'transparent'} stroke="#d6d3d1" strokeWidth={1} />
                   <text x={cx} y={cy} transform={`rotate(${p.rot} ${cx} ${cy})`} textAnchor="middle" dominantBaseline="central" fontSize={size} fontFamily="Georgia, serif" fill="#44403c">
                     {p.num}
                   </text>
