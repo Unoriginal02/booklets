@@ -1,0 +1,6 @@
+node_modules
+dist
+
+# documento privado, solo en local
+Briefing*.md
+*.tsbuildinfo

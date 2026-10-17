@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+html, body, #root { height: 100%; }
+body { background: #f4f1ec; color: #1c1917; }
+
+.paper-blank {
+  background-image: repeating-linear-gradient(45deg, #e7e2da 0 6px, #f3efe9 6px 12px);
+}
