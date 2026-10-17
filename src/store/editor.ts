@@ -5,7 +5,7 @@ import { blankSpread, cloneSpread, newPage, newSpread } from '../model/factory';
 import { fullAllowed, layoutBox, layoutToRects, newFrame, placePhoto, resolveSpacing } from '../model/geometry';
 import { centerIndex, padSpreads } from '../model/imposition';
 import { getLayout } from '../model/layouts';
-import type { Booklet, Frame, FrameTarget, Page, PageKey, Photo, Spacing, Spread, SurfaceKey } from '../model/types';
+import { isZineTarget, type AnyTarget, type Booklet, type Frame, type Page, type PageKey, type Photo, type Spacing, type Spread, type SurfaceKey } from '../model/types';
 
 let mergeKey: string | null = null;
 
@@ -31,6 +31,8 @@ interface EditorState {
   booklet: Booklet | null;
   photos: Photo[];
   sel: Selection;
+  /** página del fanzine seleccionada */
+  zsel: number | null;
   /** foto elegida en la bandeja para colocar con un toque (móvil) */
   armed: string | null;
   showGuides: boolean;
@@ -39,6 +41,7 @@ interface EditorState {
   close(): void;
   edit(fn: (b: Booklet) => void): void;
   select(sel: Partial<Selection>): void;
+  selectTarget(t: AnyTarget): void;
   arm(id: string | null): void;
   toggleGuides(): void;
   addPhotos(p: Photo[]): void;
@@ -53,10 +56,10 @@ interface EditorState {
 
   setMode(key: SurfaceKey, mode: Spread['mode']): void;
   setLayout(key: SurfaceKey, page: PageKey, layoutId: string): void;
-  placePhotoIn(t: FrameTarget, photoId: string): void;
-  swapFrames(a: FrameTarget, b: FrameTarget): void;
-  updateFrame(t: FrameTarget, patch: Partial<Frame>): void;
-  clearFrame(t: FrameTarget): void;
+  placePhotoIn(t: AnyTarget, photoId: string): void;
+  swapFrames(a: AnyTarget, b: AnyTarget): void;
+  updateFrame(t: AnyTarget, patch: Partial<Frame>): void;
+  clearFrame(t: AnyTarget): void;
 
   setSpacing(scope: SpacingScope, patch: Partial<Spacing>): void;
   clearSpacing(scope: SpacingScope): void;
@@ -66,11 +69,17 @@ function surf(b: Booklet, key: SurfaceKey): Spread {
   return key === 'cover' ? b.cover : b.spreads[key];
 }
 
-function frameAt(b: Booklet, t: FrameTarget): Frame | undefined {
+function frameAt(b: Booklet, t: AnyTarget): Frame | undefined {
+  if (isZineTarget(t)) return b.zine ? (b.zine.frames[t.zine] ??= newFrame(0)) : undefined;
   const page = surf(b, t.surface)?.[t.page];
   if (!page) return undefined;
   while (page.frames.length <= t.slot) page.frames.push(newFrame(page.frames.length));
   return page.frames[t.slot];
+}
+
+function selectIn(s: { sel: Selection; zsel: number | null }, t: AnyTarget) {
+  if (isZineTarget(t)) s.zsel = t.zine;
+  else s.sel = { ...t };
 }
 
 const resetFraming = (f: Frame) => {
@@ -85,16 +94,18 @@ export const useEditor = create<EditorState>()(
       booklet: null,
       photos: [],
       sel: { surface: 0, page: 'left', slot: null },
+      zsel: null,
       armed: null,
       showGuides: true,
 
-      load: (b, photos) => set({ booklet: b, photos, sel: { surface: 'cover', page: 'right', slot: null }, armed: null }),
+      load: (b, photos) => set({ booklet: b, photos, sel: { surface: 'cover', page: 'right', slot: null }, zsel: null, armed: null }),
       close: () => set({ booklet: null, photos: [] }),
       edit: (fn) =>
         set((s) => {
           if (s.booklet) fn(s.booklet);
         }),
       select: (sel) => set((s) => void Object.assign(s.sel, sel)),
+      selectTarget: (t) => set((s) => selectIn(s, t)),
       arm: (id) => set({ armed: id }),
       toggleGuides: () => set((s) => void (s.showGuides = !s.showGuides)),
       addPhotos: (p) => set((s) => void s.photos.push(...p)),
@@ -194,7 +205,7 @@ export const useEditor = create<EditorState>()(
           if (!f) return;
           f.photoId = photoId;
           resetFraming(f);
-          s.sel = { ...t };
+          selectIn(s, t);
           s.armed = null;
         }),
       swapFrames: (a, b) =>
@@ -209,7 +220,7 @@ export const useEditor = create<EditorState>()(
           // el encuadre de un recuadro no tiene sentido en otro de distinta forma
           resetFraming(fa);
           resetFraming(fb);
-          s.sel = { ...b };
+          selectIn(s, b);
         }),
       updateFrame: (t, patch) =>
         set((s) => {

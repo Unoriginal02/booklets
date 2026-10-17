@@ -1,6 +1,8 @@
 # Libritos
 
-Editor de libritos de fotos cosidos a caballete. Todo ocurre en el navegador: las fotos se guardan en IndexedDB y el PDF impuesto se genera en un Web Worker.
+Editor de libritos de fotos cosidos a caballete y de fanzines de una sola hoja A4. Todo ocurre en el navegador: las fotos se guardan en IndexedDB y el PDF impuesto se genera en un Web Worker. Cada librito o fanzine se puede guardar como archivo `.librito` (ZIP con la maqueta y las fotos originales) y abrirlo en otro navegador.
+
+Publicado en https://unoriginal02.github.io/booklets/ (cada push a `main` se publica solo).
 
 ```sh
 npm install
@@ -13,5 +15,7 @@ npm run build
 - `src/model/` — tipos, catálogo de composiciones, geometría (`resolveSpacing`, `layoutToRects`, `placePhoto`) e imposición (`impose`, `centerIndex`). Funciones puras con tests.
 - `src/store/editor.ts` — estado (Zustand + Immer) con deshacer/rehacer (zundo).
 - `src/lib/pdf.worker.ts` — rasteriza cada recuadro a 300 ppp y monta las hojas con pdf-lib; marcas de corte y sangrado opcionales.
-- `src/components/` — editor, bandeja, tira de dobles, inspector, hojeo y exportación.
+- `src/model/zine.ts` — plegados de fanzine. Los que son dobleces sucesivos se calculan con un simulador de papel (`simulate`); el minizine, el tríptico, el portón y los acordeones se describen a mano. Tests en `zine.test.ts`, incluida la imposición clásica de 16 páginas.
+- `src/lib/archive.ts` — exportar e importar `.librito`.
+- `src/components/` — editor de libritos, editor de fanzines, bandeja, inspector, hojeo y exportación.
 

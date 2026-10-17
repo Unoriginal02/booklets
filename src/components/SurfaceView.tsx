@@ -65,7 +65,18 @@ function SurfaceViewImpl({ booklet, surface, k, photos, interactive, guides, thu
       {pages.flatMap((p) =>
         p.frames.map((pf) => {
           const photo = pf.frame.photoId ? photos.get(pf.frame.photoId) : undefined;
-          if (interactive) return <FrameView key={`${p.page}-${pf.slot}`} pf={pf} k={k} photo={photo} />;
+          if (interactive)
+            return (
+              <FrameView
+                key={`${p.page}-${pf.slot}`}
+                target={{ surface: pf.surface, page: pf.page, slot: pf.slot }}
+                rect={pf.rect}
+                frame={pf.frame}
+                k={k}
+                photo={photo}
+                selected={sel?.surface === pf.surface && sel.page === pf.page && sel.slot === pf.slot}
+              />
+            );
           return (
             <div
               key={`${p.page}-${pf.slot}`}

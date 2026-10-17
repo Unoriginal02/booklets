@@ -68,7 +68,29 @@ export interface Booklet {
    */
   spreads: Spread[];
   coverInsideBlank: boolean;
+  /** librito cosido (por defecto) o fanzine de una sola hoja A4 */
+  kind?: 'booklet' | 'zine';
+  zine?: ZineDoc;
 }
+
+export interface ZineDoc {
+  methodId: string;
+  /** margen dentro de cada panel, en mm; 0 = a sangre */
+  margin: Mm;
+  /** una foto por página, por número de página: al cambiar de plegado cada foto sigue en su página */
+  frames: Record<number, Frame>;
+}
+
+/** Un panel del fanzine, por su número de página una vez doblado. */
+export interface ZineTarget {
+  zine: number;
+}
+
+export type AnyTarget = FrameTarget | ZineTarget;
+
+export const isZineTarget = (t: AnyTarget): t is ZineTarget => 'zine' in t;
+
+export const targetKey = (t: AnyTarget) => (isZineTarget(t) ? `z:${t.zine}` : `${t.surface}:${t.page}:${t.slot}`);
 
 export interface Photo {
   id: string;

@@ -70,3 +70,8 @@ export function paperName(w: number, h: number): string {
   }
   return `${sw} × ${sh} mm`;
 }
+
+export function newZine(title: string, methodId: string): Booklet {
+  // reutiliza la estructura del librito; el fanzine solo usa `zine`
+  return { ...newBooklet(title, 'a6'), kind: 'zine', zine: { methodId, margin: 0, frames: {} } };
+}

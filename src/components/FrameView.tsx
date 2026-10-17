@@ -1,28 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { useGesture } from '@use-gesture/react';
-import { LOW_PPI, placePhoto, type PlacedFrame } from '../model/geometry';
-import type { Frame, FrameTarget, Photo } from '../model/types';
+import { LOW_PPI, placePhoto } from '../model/geometry';
+import { targetKey, type AnyTarget, type Frame, type Photo, type Rect } from '../model/types';
+import type { Rot } from '../model/zine';
 import { useEditor } from '../store/editor';
 import { PhotoImg } from './PhotoImg';
-
-export const targetId = (t: FrameTarget) => `${t.surface}:${t.page}:${t.slot}`;
 
 type Framing = Pick<Frame, 'offsetX' | 'offsetY' | 'scale'>;
 
 interface Props {
-  pf: PlacedFrame;
+  target: AnyTarget;
+  /** dónde va el recuadro en la superficie, en mm */
+  rect: Rect;
+  /** la página puede ir girada en la hoja (fanzines): la foto se encuadra con la página del derecho */
+  rotation?: Rot;
   k: number;
+  frame: Frame;
   photo?: Photo;
+  selected: boolean;
+  /** se dibuja encima de la foto, girado con la página */
+  overlay?: ReactNode;
 }
 
-export function FrameView({ pf, k, photo }: Props) {
-  const target: FrameTarget = { surface: pf.surface, page: pf.page, slot: pf.slot };
-  const tid = targetId(target);
-  const frame = pf.frame;
-  const selected = useEditor((s) => s.sel.surface === pf.surface && s.sel.page === pf.page && s.sel.slot === pf.slot);
+/** Pasa un movimiento de pantalla a los ejes de la página girada. */
+function unrotate(mx: number, my: number, rot: Rot): [number, number] {
+  if (rot === 90) return [my, -mx];
+  if (rot === 180) return [-mx, -my];
+  if (rot === 270) return [-my, mx];
+  return [mx, my];
+}
+
+export function FrameView({ target, rect, rotation = 0, k, frame, photo, selected, overlay }: Props) {
+  const tid = targetKey(target);
   const armed = useEditor((s) => s.armed);
-  const { select, updateFrame, placePhotoIn } = useEditor.getState();
+  const { selectTarget, updateFrame, placePhotoIn } = useEditor.getState();
+  // tamaño del recuadro con la página del derecho
+  const size = rotation % 180 ? { w: rect.h, h: rect.w } : { w: rect.w, h: rect.h };
 
   const drop = useDroppable({ id: `drop:${tid}`, data: { target } });
   const drag = useDraggable({ id: `frame:${tid}`, data: { kind: 'frame', target, photoId: frame.photoId }, disabled: !frame.photoId });
@@ -37,7 +51,7 @@ export function FrameView({ pf, k, photo }: Props) {
 
   const clamp = (f: Framing): Framing => {
     if (!photo) return f;
-    const pl = placePhoto(pf.rect, photo, { ...frame, ...f });
+    const pl = placePhoto(size, photo, { ...frame, ...f });
     return { offsetX: pl.offsetX, offsetY: pl.offsetY, scale: pl.scale };
   };
   const commit = (f: Framing) => {
@@ -54,7 +68,8 @@ export function FrameView({ pf, k, photo }: Props) {
         if (first && (event.target as Element).closest('[data-handle]')) return cancel();
         if (pinching) return cancel();
         const base: Framing = memo ?? { offsetX: live.current.offsetX, offsetY: live.current.offsetY, scale: live.current.scale };
-        const next = clamp({ ...base, offsetX: base.offsetX + mx / (pf.rect.w * k), offsetY: base.offsetY + my / (pf.rect.h * k) });
+        const [dx, dy] = unrotate(mx, my, rotation);
+        const next = clamp({ ...base, offsetX: base.offsetX + dx / (size.w * k), offsetY: base.offsetY + dy / (size.h * k) });
         if (last) commit(next);
         else setDraft(next);
         return base;
@@ -83,13 +98,13 @@ export function FrameView({ pf, k, photo }: Props) {
     },
   );
 
-  const pl = photo ? placePhoto(pf.rect, photo, cur) : null;
+  const pl = photo ? placePhoto(size, photo, cur) : null;
   const lowRes = pl && pl.ppi < LOW_PPI;
 
   const onClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (armed) placePhotoIn(target, armed);
-    else select(target);
+    else selectTarget(target);
   };
 
   const setRefs = (el: HTMLDivElement | null) => {
@@ -105,15 +120,22 @@ export function FrameView({ pf, k, photo }: Props) {
       className={`group absolute overflow-hidden ${photo ? 'cursor-grab touch-none active:cursor-grabbing' : 'cursor-pointer'} ${
         photo ? '' : 'border border-dashed border-stone-300 bg-stone-100'
       } ${drop.isOver ? 'ring-4 ring-inset ring-orange-400/70' : ''} ${armed && !photo ? 'bg-orange-50' : ''}`}
-      style={{ left: pf.rect.x * k, top: pf.rect.y * k, width: pf.rect.w * k, height: pf.rect.h * k }}
+      style={{ left: rect.x * k, top: rect.y * k, width: rect.w * k, height: rect.h * k }}
     >
-      {photo ? (
-        <PhotoImg rect={pf.rect} k={k} photo={photo} frame={cur} />
-      ) : (
-        <div className="pointer-events-none flex h-full w-full items-center justify-center text-stone-400">
-          <span className="text-2xl leading-none">+</span>
-        </div>
-      )}
+      {/* la página, del derecho, girada dentro del recuadro */}
+      <div
+        className="pointer-events-none absolute top-1/2 left-1/2"
+        style={{ width: size.w * k, height: size.h * k, transform: `translate(-50%, -50%) rotate(${rotation}deg)` }}
+      >
+        {photo ? (
+          <PhotoImg rect={size} k={k} photo={photo} frame={cur} />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-stone-400">
+            <span className="text-2xl leading-none">+</span>
+          </div>
+        )}
+        {overlay}
+      </div>
 
       {selected && <div className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-orange-500" />}
 

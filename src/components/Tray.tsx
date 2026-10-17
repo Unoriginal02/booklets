@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { allPlacedFrames, LOW_PPI, placePhoto } from '../model/geometry';
+import { LOW_PPI, placePhoto } from '../model/geometry';
+import { frameUses } from '../model/uses';
 import { importPhotos, photoUrl, removePhoto } from '../lib/photos';
 import type { Photo } from '../model/types';
 import { useEditor } from '../store/editor';
@@ -19,12 +20,12 @@ export function Tray() {
   const usage = useMemo(() => {
     const byId = new Map(photos.map((p) => [p.id, p]));
     const m = new Map<string, { count: number; minPpi: number }>();
-    for (const pf of allPlacedFrames(b)) {
-      const p = pf.frame.photoId ? byId.get(pf.frame.photoId) : undefined;
+    for (const use of frameUses(b)) {
+      const p = use.frame.photoId ? byId.get(use.frame.photoId) : undefined;
       if (!p) continue;
       const u = m.get(p.id) ?? { count: 0, minPpi: Infinity };
       u.count++;
-      u.minPpi = Math.min(u.minPpi, placePhoto(pf.rect, p, pf.frame).ppi);
+      u.minPpi = Math.min(u.minPpi, placePhoto(use.size, p, use.frame).ppi);
       m.set(p.id, u);
     }
     return m;

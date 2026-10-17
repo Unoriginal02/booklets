@@ -3,7 +3,7 @@ import { fullAllowed, getSurface, LOW_PPI, MAX_SCALE, minScale, placePhoto, reso
 import { centerIndex, isForcedBlank, pageLabel } from '../model/imposition';
 import { COVER_FULL_NAMES, PAGE_LAYOUTS, SPREAD_LAYOUTS } from '../model/layouts';
 import { FORMATS, getFormat, paperName } from '../model/factory';
-import type { FrameTarget, PageSide, Spacing } from '../model/types';
+import { targetKey, type AnyTarget, type Frame, type PageSide, type Spacing } from '../model/types';
 import { merging, useEditor, type SpacingScope } from '../store/editor';
 import { LayoutPicker, RatioPicker } from './LayoutPicker';
 import { Btn, NumField, Section, Seg } from './ui';
@@ -164,15 +164,18 @@ export function Inspector() {
 function FrameSection() {
   const b = useEditor((s) => s.booklet)!;
   const sel = useEditor((s) => s.sel);
-  const photos = useEditor((s) => s.photos);
-  const st = useEditor.getState();
   if (sel.slot == null) return null;
   const pf = surfacePages(b, sel.surface)
     .find((p) => p.page === sel.page)
     ?.frames.find((f) => f.slot === sel.slot);
   if (!pf) return null;
-  const t: FrameTarget = { surface: sel.surface, page: sel.page, slot: sel.slot };
-  const f = pf.frame;
+  return <FrameControls target={{ surface: sel.surface, page: sel.page, slot: sel.slot }} size={pf.rect} frame={pf.frame} />;
+}
+
+/** Encaje, zoom, giro y espejo de la foto de un recuadro (librito o fanzine). */
+export function FrameControls({ target, size, frame: f }: { target: AnyTarget; size: { w: number; h: number }; frame: Frame }) {
+  const photos = useEditor((s) => s.photos);
+  const st = useEditor.getState();
   const photo = photos.find((p) => p.id === f.photoId);
 
   if (!photo)
@@ -182,7 +185,7 @@ function FrameSection() {
       </Section>
     );
 
-  const pl = placePhoto(pf.rect, photo, f);
+  const pl = placePhoto(size, photo, f);
   const low = pl.ppi < LOW_PPI;
   return (
     <Section title="Recuadro">
@@ -193,7 +196,7 @@ function FrameSection() {
       <div className="mb-2">
         <Seg
           value={f.fit}
-          onChange={(fit) => st.updateFrame(t, { fit, scale: 1, offsetX: 0, offsetY: 0 })}
+          onChange={(fit) => st.updateFrame(target, { fit, scale: 1, offsetX: 0, offsetY: 0 })}
           options={[
             { value: 'cover', label: 'Rellenar' },
             { value: 'contain', label: 'Encajar entera' },
@@ -209,21 +212,21 @@ function FrameSection() {
           max={MAX_SCALE}
           step={0.01}
           value={pl.scale}
-          onChange={(e) => merging(`zoom:${sel.surface}:${sel.page}:${sel.slot}`, () => st.updateFrame(t, { scale: Number(e.target.value) }))}
+          onChange={(e) => merging(`zoom:${targetKey(target)}`, () => st.updateFrame(target, { scale: Number(e.target.value) }))}
         />
         <span className="w-9 text-right tabular-nums">{Math.round(pl.scale * 100)}%</span>
       </label>
       <div className="flex flex-wrap gap-1">
-        <Btn variant="outline" onClick={() => st.updateFrame(t, { rotation: ((f.rotation + 90) % 360) as typeof f.rotation, offsetX: 0, offsetY: 0 })}>
+        <Btn variant="outline" onClick={() => st.updateFrame(target, { rotation: ((f.rotation + 90) % 360) as typeof f.rotation, offsetX: 0, offsetY: 0 })}>
           ↻ 90°
         </Btn>
-        <Btn variant="outline" onClick={() => st.updateFrame(t, { flipX: !f.flipX })}>
+        <Btn variant="outline" onClick={() => st.updateFrame(target, { flipX: !f.flipX })}>
           ⇋ Espejo
         </Btn>
-        <Btn variant="outline" title="También con doble clic" onClick={() => st.updateFrame(t, { offsetX: 0, offsetY: 0, scale: 1 })}>
+        <Btn variant="outline" title="También con doble clic" onClick={() => st.updateFrame(target, { offsetX: 0, offsetY: 0, scale: 1 })}>
           Centrar
         </Btn>
-        <Btn variant="danger" onClick={() => st.clearFrame(t)}>
+        <Btn variant="danger" onClick={() => st.clearFrame(target)}>
           Quitar
         </Btn>
       </div>

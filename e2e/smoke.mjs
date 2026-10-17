@@ -33,7 +33,8 @@ const frames = () => page.locator('main .group.absolute');
 await page.goto(url);
 await page.getByPlaceholder('Verano en la costa').fill('Prueba A6');
 await page.getByRole('button', { name: 'Crear' }).click();
-await page.locator('input[type=file]').setInputFiles(files);
+await page.getByRole('button', { name: 'Hojear' }).waitFor();
+await page.locator('input[type=file][multiple]').setInputFiles(files);
 await page.waitForFunction((n) => document.querySelectorAll('aside img').length >= n, files.length, { timeout: 30000 });
 
 // portada

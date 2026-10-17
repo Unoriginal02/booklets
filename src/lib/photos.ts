@@ -66,6 +66,16 @@ export async function importPhotos(bookletId: string, files: File[]): Promise<{ 
   return { photos, failed };
 }
 
+/** Guarda una foto ya decodificable (p. ej. de un archivo .librito) con un id nuevo. */
+export async function addPhotoBlob(bookletId: string, blob: Blob, name: string, createdAt = Date.now()): Promise<Photo | null> {
+  const res = await decode(blob);
+  if (!res.ok) return null;
+  const row: PhotoRow = { id: uid(), bookletId, name, w: res.w, h: res.h, createdAt, blob, preview: res.preview, thumb: res.thumb };
+  await db.photos.put(row);
+  cacheUrls(row);
+  return stripBlobs(row);
+}
+
 export function stripBlobs({ blob: _b, preview: _p, thumb: _t, ...meta }: PhotoRow): Photo {
   return meta;
 }

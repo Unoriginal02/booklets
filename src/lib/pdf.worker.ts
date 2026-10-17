@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
 // Genera el PDF impuesto en el propio navegador: cada recuadro se rasteriza ya recortado.
-import { PDFDocument, StandardFonts, rgb, type PDFPage } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { db } from '../db/db';
 import { getSurface, MM_PER_INCH, placePhoto, surfacePages, TARGET_PPI, type PlacedFrame } from '../model/geometry';
 import { faceRef, impose, sheetsFor } from '../model/imposition';
-import type { Booklet, Photo } from '../model/types';
+import type { Booklet, Frame, Photo } from '../model/types';
+import { getZineMethod, linesFor, paperFor, ZINE_BLEED, zineFrames, type GuideLine, type Rot, type ZineMethod } from '../model/zine';
 
 const PT = 72 / MM_PER_INCH;
 
@@ -16,7 +17,9 @@ export interface Paper {
 
 export type PdfRequest =
   | { kind: 'booklet'; booklet: Booklet; photos: Photo[]; coverSeparate: boolean; paper?: Paper }
-  | { kind: 'test'; w: number; h: number; paper?: Paper };
+  | { kind: 'test'; w: number; h: number; paper?: Paper }
+  | { kind: 'zine'; booklet: Booklet; photos: Photo[] }
+  | { kind: 'zineGuide'; methodId: string };
 
 export type PdfResponse =
   | { type: 'progress'; done: number; total: number }
@@ -41,10 +44,9 @@ function sheetFrame(sheetW: number, sheetH: number, paper?: Paper) {
 
 type SheetFrame = ReturnType<typeof sheetFrame>;
 
-/** Marcas de corte en las esquinas y de pliegue en el centro, fuera de la zona de corte. */
-function drawMarks(page: PDFPage, f: SheetFrame, sheetW: number, sheetH: number, bleed: number) {
+/** Marcas de corte en las esquinas y de pliegue donde cada doblez llega al borde, fuera de la zona de corte. */
+function drawMarks(page: PDFPage, f: SheetFrame, sheetW: number, sheetH: number, bleed: number, folds?: GuideLine[], len = 6) {
   const off = bleed + 2;
-  const len = 6;
   const black = rgb(0, 0, 0);
   const line = (x1: number, y1: number, x2: number, y2: number, dashed = false) =>
     page.drawLine({
@@ -62,27 +64,44 @@ function drawMarks(page: PDFPage, f: SheetFrame, sheetW: number, sheetH: number,
       line(cx, cy + sy * off, cx, cy + sy * (off + len));
     }
   }
-  const mid = sheetW / 2;
-  line(mid, -off, mid, -off - len, true);
-  line(mid, sheetH + off, mid, sheetH + off + len, true);
+  const eps = 0.01;
+  const center: GuideLine = { x1: sheetW / 2, y1: 0, x2: sheetW / 2, y2: sheetH, kind: 'fold' };
+  for (const l of folds ?? [center]) {
+    if (l.kind !== 'fold') continue;
+    if (Math.abs(l.x1 - l.x2) < eps) {
+      if (Math.min(l.y1, l.y2) < eps) line(l.x1, -off, l.x1, -off - len, true);
+      if (Math.max(l.y1, l.y2) > sheetH - eps) line(l.x1, sheetH + off, l.x1, sheetH + off + len, true);
+    } else if (Math.abs(l.y1 - l.y2) < eps) {
+      if (Math.min(l.x1, l.x2) < eps) line(-off, l.y1, -off - len, l.y1, true);
+      if (Math.max(l.x1, l.x2) > sheetW - eps) line(sheetW + off, l.y1, sheetW + off + len, l.y1, true);
+    }
+  }
 }
 
-async function rasterize(f: PlacedFrame, photo: Photo, blob: Blob): Promise<ArrayBuffer> {
-  const pl = placePhoto(f.rect, photo, f.frame);
+/**
+ * Rasteriza un recuadro. `size` es el recuadro con la página del derecho; con `rot` la imagen
+ * sale ya girada como va en la hoja (fanzines).
+ */
+async function rasterize(size: { w: number; h: number }, rot: Rot, frame: Frame, photo: Photo, blob: Blob): Promise<ArrayBuffer> {
+  const pl = placePhoto(size, photo, frame);
   // no se sube la resolución por encima de la que tiene la foto: pesa más y no gana nada
   const ppi = Math.max(96, Math.min(TARGET_PPI, pl.ppi));
   const k = ppi / MM_PER_INCH; // px por mm
-  const W = Math.max(1, Math.round(f.rect.w * k));
-  const H = Math.max(1, Math.round(f.rect.h * k));
+  const turned = rot % 180 !== 0;
+  const W = Math.max(1, Math.round((turned ? size.h : size.w) * k));
+  const H = Math.max(1, Math.round((turned ? size.w : size.h) * k));
   const canvas = new OffscreenCanvas(W, H);
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
   const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
   ctx.imageSmoothingQuality = 'high';
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate((rot * Math.PI) / 180);
+  ctx.translate((-size.w / 2) * k, (-size.h / 2) * k);
   ctx.translate(pl.cx * k, pl.cy * k);
-  ctx.rotate((f.frame.rotation * Math.PI) / 180);
-  ctx.scale(f.frame.flipX ? -1 : 1, 1);
+  ctx.rotate((frame.rotation * Math.PI) / 180);
+  ctx.scale(frame.flipX ? -1 : 1, 1);
   ctx.drawImage(bmp, (-pl.iw / 2) * k, (-pl.ih / 2) * k, pl.iw * k, pl.ih * k);
   bmp.close();
   const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
@@ -138,7 +157,7 @@ async function buildBooklet(req: Extract<PdfRequest, { kind: 'booklet' }>) {
       const photo = photos.get(frame.frame.photoId!)!;
       const row = await db.photos.get(photo.id);
       if (row) {
-        const jpg = await doc.embedJpg(await rasterize(frame, photo, row.blob));
+        const jpg = await doc.embedJpg(await rasterize(frame.rect, 0, frame.frame, photo, row.blob));
         const r = frame.rect;
         page.drawImage(jpg, { x: sheet.x(r.x + dx), y: sheet.y(r.y, r.h), width: r.w * PT, height: r.h * PT });
       }
@@ -150,6 +169,91 @@ async function buildBooklet(req: Extract<PdfRequest, { kind: 'booklet' }>) {
   const mainBytes = await main.save();
   const coverBytes = cover ? await cover.save() : undefined;
   post({ type: 'done', main: mainBytes, cover: coverBytes }, [mainBytes.buffer, ...(coverBytes ? [coverBytes.buffer] : [])] as Transferable[]);
+}
+
+async function buildZine(b: Booklet, list: Photo[]) {
+  const m = getZineMethod(b.zine?.methodId);
+  const photos = new Map(list.map((p) => [p.id, p]));
+  const sheet = sheetFrame(m.trim.w, m.trim.h, paperFor(m));
+  const frames = zineFrames(b).filter((z) => z.frame.photoId && photos.has(z.frame.photoId));
+  let done = 0;
+  post({ type: 'progress', done, total: frames.length });
+  const doc = await PDFDocument.create();
+  doc.setTitle(b.title);
+  doc.setCreator('Libritos');
+  for (let side = 0; side < m.sides; side++) {
+    const page = doc.addPage(sheet.size);
+    for (const z of frames.filter((f) => f.panel.side === side)) {
+      const photo = photos.get(z.frame.photoId!)!;
+      const row = await db.photos.get(photo.id);
+      if (row) {
+        const jpg = await doc.embedJpg(await rasterize(z.size, z.panel.rot, z.frame, photo, row.blob));
+        page.drawImage(jpg, { x: sheet.x(z.rect.x), y: sheet.y(z.rect.y, z.rect.h), width: z.rect.w * PT, height: z.rect.h * PT });
+      }
+      post({ type: 'progress', done: ++done, total: frames.length });
+    }
+    drawMarks(page, sheet, m.trim.w, m.trim.h, (b.zine?.margin ?? 0) > 0 ? 0 : ZINE_BLEED, linesFor(m, side as 0 | 1), 5);
+  }
+  const bytes = await doc.save();
+  post({ type: 'done', main: bytes }, [bytes.buffer as ArrayBuffer]);
+}
+
+/** Texto centrado en un punto y girado como la página (rot en sentido horario). */
+function centeredText(page: PDFPage, text: string, font: PDFFont, size: number, cx: number, cy: number, rot: Rot, dy = 0) {
+  const t = (-rot * Math.PI) / 180;
+  const w = font.widthOfTextAtSize(text, size);
+  const lx = -w / 2;
+  const ly = -size * 0.35 + dy;
+  page.drawText(text, {
+    x: cx + lx * Math.cos(t) - ly * Math.sin(t),
+    y: cy + lx * Math.sin(t) + ly * Math.cos(t),
+    size,
+    font,
+    rotate: degrees(-rot),
+    color: rgb(0.16, 0.14, 0.13),
+  });
+}
+
+/** La hoja sin fotos: números, nombres, flecha hacia arriba de cada página, dobleces y cortes. */
+async function buildZineGuide(m: ZineMethod) {
+  const doc = await PDFDocument.create();
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const sheet = sheetFrame(m.trim.w, m.trim.h, paperFor(m));
+  const gray = rgb(0.62, 0.6, 0.57);
+  for (let side = 0; side < m.sides; side++) {
+    const page = doc.addPage(sheet.size);
+    page.drawRectangle({ x: sheet.x(0), y: sheet.y(0, m.trim.h), width: m.trim.w * PT, height: m.trim.h * PT, borderColor: gray, borderWidth: 0.6 });
+    for (const p of m.panels.filter((x) => x.side === side)) {
+      const cx = sheet.x(p.rect.x + p.rect.w / 2);
+      const cy = sheet.y(p.rect.y + p.rect.h / 2);
+      const big = Math.min(p.rect.w, p.rect.h) * PT * 0.42;
+      centeredText(page, String(p.num), bold, big, cx, cy, p.rot);
+      centeredText(page, p.name, font, 8, cx, cy, p.rot, -big * 0.62);
+      // flecha hacia la parte de arriba de la página
+      const t = (-p.rot * Math.PI) / 180;
+      const reach = ((p.rot % 180 ? p.rect.w : p.rect.h) / 2 - 7) * PT;
+      const at = (lx: number, ly: number) => ({ x: cx + lx * Math.cos(t) - ly * Math.sin(t), y: cy + lx * Math.sin(t) + ly * Math.cos(t) });
+      const tip = at(0, reach);
+      page.drawLine({ start: at(0, reach - 16), end: tip, thickness: 1, color: gray });
+      page.drawLine({ start: at(-4, reach - 5), end: tip, thickness: 1, color: gray });
+      page.drawLine({ start: at(4, reach - 5), end: tip, thickness: 1, color: gray });
+    }
+    for (const l of linesFor(m, side as 0 | 1)) {
+      page.drawLine({
+        start: { x: sheet.x(l.x1), y: sheet.y(l.y1) },
+        end: { x: sheet.x(l.x2), y: sheet.y(l.y2) },
+        thickness: l.kind === 'cut' ? 1.4 : 0.7,
+        color: l.kind === 'cut' ? rgb(0.86, 0.15, 0.15) : rgb(0.05, 0.6, 0.9),
+        dashArray: l.kind === 'cut' ? undefined : [5, 3],
+      });
+    }
+    drawMarks(page, sheet, m.trim.w, m.trim.h, ZINE_BLEED, linesFor(m, side as 0 | 1), 5);
+    const label = m.name + ' · ' + (m.sides === 1 ? 'una cara' : side === 0 ? 'cara A' : 'cara B') + ' · maqueta de prueba';
+    page.drawText(label, { x: sheet.x(0), y: sheet.y(m.trim.h) - 11, size: 7, font, color: gray });
+  }
+  const bytes = await doc.save();
+  post({ type: 'done', main: bytes }, [bytes.buffer as ArrayBuffer]);
 }
 
 /** Dos páginas para comprobar el volteo de la impresora antes de gastar papel. */
@@ -192,6 +296,8 @@ async function buildTest(w: number, h: number, paper?: Paper) {
 self.onmessage = async (e: MessageEvent<PdfRequest>) => {
   try {
     if (e.data.kind === 'test') await buildTest(e.data.w, e.data.h, e.data.paper);
+    else if (e.data.kind === 'zine') await buildZine(e.data.booklet, e.data.photos);
+    else if (e.data.kind === 'zineGuide') await buildZineGuide(getZineMethod(e.data.methodId));
     else await buildBooklet(e.data);
   } catch (err) {
     post({ type: 'error', error: err instanceof Error ? err.message : String(err) });
