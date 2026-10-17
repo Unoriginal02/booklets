@@ -48,6 +48,14 @@ export interface Page extends Partial<Look> {
   spacing?: Partial<Spacing>;
 }
 
+/** El diseño de una página sin sus fotos, para copiarlo en otra. */
+export interface PageStyle extends Partial<Look> {
+  /** una página suelta o la doble entera: solo se pega en otra igual */
+  scope: 'page' | 'spread';
+  layoutId: string;
+  spacing?: Partial<Spacing>;
+}
+
 /**
  * Una doble página tal como se ve el librito abierto. Se guardan siempre las tres
  * variantes para no perder contenido al cambiar de modo.

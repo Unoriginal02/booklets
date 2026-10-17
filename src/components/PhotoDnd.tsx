@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
 import { saveBooklet } from '../db/db';
+import { isForcedBlank } from '../model/imposition';
 import { photoUrl } from '../lib/photos';
 import type { AnyTarget } from '../model/types';
 import { isZineTarget } from '../model/types';
@@ -89,6 +90,14 @@ export function useEditorChrome(): boolean {
       } else if (mod && e.key.toLowerCase() === 'y' && !typing) {
         e.preventDefault();
         redo();
+      } else if (mod && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'v') && !typing && !window.getSelection()?.toString()) {
+        // copiar y pegar el diseño de la página seleccionada
+        const { sel, booklet, copyStyle, pasteStyle } = useEditor.getState();
+        if (!booklet || booklet.kind === 'zine') return;
+        if (sel.page !== 'full' && isForcedBlank(booklet, sel.surface, sel.page)) return;
+        e.preventDefault();
+        if (e.key.toLowerCase() === 'c') copyStyle(sel.surface, sel.page);
+        else pasteStyle(sel.surface, sel.page);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !typing) {
         const { sel, zsel, booklet, clearFrame } = useEditor.getState();
         if (booklet?.kind === 'zine') {

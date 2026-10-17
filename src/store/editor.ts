@@ -3,9 +3,9 @@ import { immer } from 'zustand/middleware/immer';
 import { temporal } from 'zundo';
 import { blankSpread, cloneSpread, newPage, newSpread, upgradeBooklet } from '../model/factory';
 import { fullAllowed, newFrame, pageRects, placePhoto, resolveSpacing } from '../model/geometry';
-import { centerIndex, padSpreads } from '../model/imposition';
+import { centerIndex, isForcedBlank, padSpreads } from '../model/imposition';
 import { DEFAULT_LOOK, getLayout, pageLook } from '../model/layouts';
-import { isZineTarget, type AnyTarget, type Booklet, type Frame, type Look, type Page, type PageKey, type Photo, type Spacing, type Spread, type SurfaceKey } from '../model/types';
+import { isZineTarget, type AnyTarget, type Booklet, type Frame, type Look, type Page, type PageKey, type PageStyle, type Photo, type Spacing, type Spread, type SurfaceKey } from '../model/types';
 
 let mergeKey: string | null = null;
 
@@ -36,6 +36,8 @@ interface EditorState {
   /** foto elegida en la bandeja para colocar con un toque (móvil) */
   armed: string | null;
   showGuides: boolean;
+  /** diseño copiado con «Copiar diseño» */
+  clipboard: PageStyle | null;
 
   load(b: Booklet, photos: Photo[]): void;
   close(): void;
@@ -57,6 +59,10 @@ interface EditorState {
   setMode(key: SurfaceKey, mode: Spread['mode']): void;
   setLayout(key: SurfaceKey, page: PageKey, layoutId: string): void;
   setLook(key: SurfaceKey, page: PageKey, patch: Partial<Look>): void;
+  copyStyle(key: SurfaceKey, page: PageKey): void;
+  pasteStyle(key: SurfaceKey, page: PageKey): void;
+  /** en todas las páginas interiores que se ven, salvo las que van en blanco por la cartulina */
+  pasteStyleEverywhere(): void;
   placePhotoIn(t: AnyTarget, photoId: string): void;
   swapFrames(a: AnyTarget, b: AnyTarget): void;
   updateFrame(t: AnyTarget, patch: Partial<Frame>): void;
@@ -83,6 +89,22 @@ function selectIn(s: { sel: Selection; zsel: number | null }, t: AnyTarget) {
   else s.sel = { ...t };
 }
 
+// copia a mano: los márgenes son un objeto plano y structuredClone no acepta borradores de immer
+const styleOf = (p: Omit<Page, 'frames'>, scope: PageStyle['scope']): PageStyle => ({
+  scope,
+  layoutId: p.layoutId,
+  bleed: p.bleed,
+  scale: p.scale,
+  align: p.align,
+  spacing: p.spacing && { ...p.spacing },
+});
+
+/** Pone el diseño en la página; las fotos se quedan, por orden de recuadro. */
+function applyStyle(sp: Spread, page: PageKey, style: PageStyle) {
+  const { scope: _scope, ...rest } = styleOf(style, style.scope);
+  sp[page] = { ...newPage(style.layoutId, sp[page].frames), ...rest };
+}
+
 const resetFraming = (f: Frame) => {
   f.offsetX = 0;
   f.offsetY = 0;
@@ -98,6 +120,7 @@ export const useEditor = create<EditorState>()(
       zsel: null,
       armed: null,
       showGuides: true,
+      clipboard: null,
 
       load: (b, photos) => set({ booklet: upgradeBooklet(b), photos, sel: { surface: 'cover', page: 'right', slot: null }, zsel: null, armed: null }),
       close: () => set({ booklet: null, photos: [] }),
@@ -202,6 +225,25 @@ export const useEditor = create<EditorState>()(
         }),
       setLook: (key, page, patch) =>
         set((s) => void Object.assign(surf(s.booklet!, key)[page], patch)),
+      copyStyle: (key, page) => set((s) => void (s.clipboard = styleOf(surf(s.booklet!, key)[page], page === 'full' ? 'spread' : 'page'))),
+      pasteStyle: (key, page) =>
+        set((s) => {
+          const c = s.clipboard;
+          if (!c || c.scope !== (page === 'full' ? 'spread' : 'page')) return;
+          applyStyle(surf(s.booklet!, key), page, c);
+          s.sel.slot = null;
+        }),
+      pasteStyleEverywhere: () =>
+        set((s) => {
+          const c = s.clipboard;
+          const b = s.booklet!;
+          if (!c || c.scope !== 'page') return;
+          b.spreads.forEach((sp, i) => {
+            if (sp.mode !== 'pages') return;
+            for (const side of ['left', 'right'] as const) if (!isForcedBlank(b, i, side)) applyStyle(sp, side, c);
+          });
+          s.sel.slot = null;
+        }),
       placePhotoIn: (t, photoId) =>
         set((s) => {
           const f = frameAt(s.booklet!, t);

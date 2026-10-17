@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { fullAllowed, getSurface, LOW_PPI, MAX_SCALE, minScale, placePhoto, resolveSpacing, surfacePages } from '../model/geometry';
 import { centerIndex, isForcedBlank, pageLabel } from '../model/imposition';
 import { FORMATS, getFormat, paperName } from '../model/factory';
+import { getLayout } from '../model/layouts';
 import { targetKey, type AnyTarget, type Frame, type PageSide, type Spacing } from '../model/types';
 import { merging, useEditor, type SpacingScope } from '../store/editor';
 import { CompositionPicker } from './LayoutPicker';
@@ -80,7 +81,8 @@ export function Inspector() {
         />
       </Section>
 
-      <Section title="Composición">
+      <Section title="Composición" right={<StyleClipboard />}>
+        <ClipboardNotice />
         {s.mode === 'full' ? (
           <CompositionPicker
             scope="spread"
@@ -167,6 +169,55 @@ export function Inspector() {
           Página {w} × {h} mm · se imprime en {paperName(w, h)} apaisado. Las composiciones se recalculan solas; los márgenes se mantienen.
         </p>
       </Section>
+    </div>
+  );
+}
+
+/** La página seleccionada, o null si es una página en blanco por la cartulina. */
+function useStylePage() {
+  const b = useEditor((s) => s.booklet)!;
+  const sel = useEditor((s) => s.sel);
+  if (sel.page !== 'full' && isForcedBlank(b, sel.surface, sel.page)) return null;
+  return { key: sel.surface, page: sel.page, scope: sel.page === 'full' ? ('spread' as const) : ('page' as const) };
+}
+
+function StyleClipboard() {
+  const clip = useEditor((s) => s.clipboard);
+  const target = useStylePage();
+  const st = useEditor.getState();
+  if (!target) return null;
+  const where = target.scope === 'spread' ? 'la doble' : 'la página';
+  return (
+    <div className="flex">
+      <Btn title={`Copiar el diseño de ${where}: composición, tamaño, posición y márgenes, sin las fotos (Ctrl+C)`} onClick={() => st.copyStyle(target.key, target.page)}>
+        Copiar diseño
+      </Btn>
+      <Btn
+        title={clip && clip.scope !== target.scope ? `El diseño copiado es de ${clip.scope === 'spread' ? 'una doble entera' : 'una página'}` : `Pegar el diseño copiado en ${where}; las fotos se quedan (Ctrl+V)`}
+        disabled={clip?.scope !== target.scope}
+        onClick={() => st.pasteStyle(target.key, target.page)}
+      >
+        Pegar
+      </Btn>
+    </div>
+  );
+}
+
+function ClipboardNotice() {
+  const clip = useEditor((s) => s.clipboard);
+  const st = useEditor.getState();
+  if (!clip) return null;
+  const size = clip.bleed ? 'a sangre' : clip.scale != null && clip.scale < 1 ? `al ${Math.round(clip.scale * 100)} %` : 'al margen';
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2 rounded-md bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+      <span className="min-w-0 truncate" title={getLayout(clip.layoutId).name}>
+        Copiado: {getLayout(clip.layoutId).name} · {size}
+      </span>
+      {clip.scope === 'page' && (
+        <button className="shrink-0 font-medium underline-offset-2 hover:underline" title="Todas las páginas interiores, salvo las dobles a página completa y las que van en blanco" onClick={st.pasteStyleEverywhere}>
+          Pegar en todas
+        </button>
+      )}
     </div>
   );
 }
