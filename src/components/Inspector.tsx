@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { fullAllowed, getSurface, LOW_PPI, MAX_SCALE, minScale, placePhoto, resolveSpacing, surfacePages } from '../model/geometry';
 import { centerIndex, isForcedBlank, pageLabel } from '../model/imposition';
-import { COVER_FULL_NAMES, PAGE_LAYOUTS, SPREAD_LAYOUTS } from '../model/layouts';
 import { FORMATS, getFormat, paperName } from '../model/factory';
 import { targetKey, type AnyTarget, type Frame, type PageSide, type Spacing } from '../model/types';
 import { merging, useEditor, type SpacingScope } from '../store/editor';
-import { LayoutPicker, RatioPicker } from './LayoutPicker';
+import { CompositionPicker } from './LayoutPicker';
 import { Btn, NumField, Section, Seg } from './ui';
 
 export function Inspector() {
@@ -83,16 +82,18 @@ export function Inspector() {
 
       <Section title="Composición">
         {s.mode === 'full' ? (
-          <>
-            <LayoutPicker
-              layouts={isCover ? SPREAD_LAYOUTS.filter((l) => COVER_FULL_NAMES[l.id]) : SPREAD_LAYOUTS}
-              names={isCover ? COVER_FULL_NAMES : undefined}
-              value={s.full.layoutId}
-              onChange={(id) => st.setLayout(key, 'full', id)}
-              aspect={(2 * w) / h}
-            />
-            {!isCover && <RatioPicker scope="spread" value={s.full.layoutId} onChange={(id) => st.setLayout(key, 'full', id)} aspect={(2 * w) / h} />}
-          </>
+          <CompositionPicker
+            scope="spread"
+            page={s.full}
+            pageKey="full"
+            pageW={w}
+            pageH={h}
+            spacing={resolveSpacing(b.spacing, s.spacing, s.full.spacing)}
+            fillLabel={isCover ? 'Envolvente' : 'Doble'}
+            historyKey={`${key}:full`}
+            onLayout={(id) => st.setLayout(key, 'full', id)}
+            onLook={(patch) => st.setLook(key, 'full', patch)}
+          />
         ) : (
           <>
             <div className="mb-2">
@@ -105,10 +106,19 @@ export function Inspector() {
             {isForcedBlank(b, key, side) ? (
               <p className="text-xs text-stone-500">Página en blanco porque la cubierta va en cartulina. Puedes cambiarlo en «Librito».</p>
             ) : (
-              <>
-                <LayoutPicker layouts={PAGE_LAYOUTS} value={s[side].layoutId} onChange={(id) => st.setLayout(key, side, id)} aspect={w / h} />
-                <RatioPicker value={s[side].layoutId} onChange={(id) => st.setLayout(key, side, id)} aspect={w / h} />
-              </>
+              <CompositionPicker
+                key={side}
+                scope="page"
+                page={s[side]}
+                pageKey={side}
+                pageW={w}
+                pageH={h}
+                spacing={resolveSpacing(b.spacing, s.spacing, s[side].spacing)}
+                fillLabel={getFormat(b.formatId).name}
+                historyKey={`${key}:${side}`}
+                onLayout={(id) => st.setLayout(key, side, id)}
+                onLook={(patch) => st.setLook(key, side, patch)}
+              />
             )}
           </>
         )}

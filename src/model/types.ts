@@ -30,7 +30,19 @@ export interface Frame {
   flipX: boolean;
 }
 
-export interface Page {
+/** Alineación vertical de la composición cuando no ocupa todo el alto. */
+export type Align = 'start' | 'center' | 'end';
+
+/** Tamaño y posición de la composición, independientes de cuál sea. */
+export interface Look {
+  /** llega hasta el corte (y el sangrado) en vez de quedarse en los márgenes */
+  bleed: boolean;
+  /** fracción de la caja de márgenes; 1 = toca los márgenes */
+  scale: number;
+  align: Align;
+}
+
+export interface Page extends Partial<Look> {
   layoutId: string;
   frames: Frame[];
   spacing?: Partial<Spacing>;
@@ -113,12 +125,9 @@ export interface Layout {
   id: string;
   name: string;
   scope: 'page' | 'spread';
-  /** ignora márgenes y se extiende al sangrado */
-  bleed: boolean;
   /** fracciones, p. ej. [2, 1] */
   grid: { cols: number[]; rows: number[] };
   cells: LayoutCell[];
-  basic?: boolean;
   /** ancho/alto fijo: un solo recuadro, lo mayor posible dentro de los márgenes y centrado */
   aspect?: number;
 }

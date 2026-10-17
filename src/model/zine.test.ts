@@ -36,12 +36,10 @@ describe('métodos de fanzine', () => {
     ]);
   });
 
-  it('cuadernillo de 8, doblez francés, díptico y minizine', () => {
+  it('cuadernillo de 8, doblez francés y minizine', () => {
     expect(grid('cuadernillo-8', 0)).toEqual([['5↓', '4↓'], ['8', '1']]);
     expect(grid('cuadernillo-8', 1)).toEqual([['3↓', '6↓'], ['2', '7']]);
     expect(grid('frances-4', 0)).toEqual([['3↓', '2↓'], ['4', '1']]);
-    expect(grid('diptico-4', 0)).toEqual([['4', '1']]);
-    expect(grid('diptico-4', 1)).toEqual([['2', '3']]);
     expect(grid('minizine-8', 0)).toEqual([
       ['5↓', '4↓', '3↓', '2↓'],
       ['6', '7', '8', '1'],
@@ -49,7 +47,7 @@ describe('métodos de fanzine', () => {
   });
 
   it('en los cuadernillos, cada hoja lleva sus dos páginas espalda con espalda', () => {
-    for (const id of ['cuadernillo-16', 'cuadernillo-8', 'diptico-4']) {
+    for (const id of ['cuadernillo-16', 'cuadernillo-8']) {
       const m = getZineMethod(id);
       const at = (n: number) => m.panels.find((p) => p.num === n)!;
       for (let n = 1; n < m.pages; n += 2) {

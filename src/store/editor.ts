@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { temporal } from 'zundo';
-import { blankSpread, cloneSpread, newPage, newSpread } from '../model/factory';
-import { fullAllowed, layoutBox, layoutToRects, newFrame, placePhoto, resolveSpacing } from '../model/geometry';
+import { blankSpread, cloneSpread, newPage, newSpread, upgradeBooklet } from '../model/factory';
+import { fullAllowed, newFrame, pageRects, placePhoto, resolveSpacing } from '../model/geometry';
 import { centerIndex, padSpreads } from '../model/imposition';
-import { getLayout } from '../model/layouts';
-import { isZineTarget, type AnyTarget, type Booklet, type Frame, type Page, type PageKey, type Photo, type Spacing, type Spread, type SurfaceKey } from '../model/types';
+import { DEFAULT_LOOK, getLayout, pageLook } from '../model/layouts';
+import { isZineTarget, type AnyTarget, type Booklet, type Frame, type Look, type Page, type PageKey, type Photo, type Spacing, type Spread, type SurfaceKey } from '../model/types';
 
 let mergeKey: string | null = null;
 
@@ -56,6 +56,7 @@ interface EditorState {
 
   setMode(key: SurfaceKey, mode: Spread['mode']): void;
   setLayout(key: SurfaceKey, page: PageKey, layoutId: string): void;
+  setLook(key: SurfaceKey, page: PageKey, patch: Partial<Look>): void;
   placePhotoIn(t: AnyTarget, photoId: string): void;
   swapFrames(a: AnyTarget, b: AnyTarget): void;
   updateFrame(t: AnyTarget, patch: Partial<Frame>): void;
@@ -98,7 +99,7 @@ export const useEditor = create<EditorState>()(
       armed: null,
       showGuides: true,
 
-      load: (b, photos) => set({ booklet: b, photos, sel: { surface: 'cover', page: 'right', slot: null }, zsel: null, armed: null }),
+      load: (b, photos) => set({ booklet: upgradeBooklet(b), photos, sel: { surface: 'cover', page: 'right', slot: null }, zsel: null, armed: null }),
       close: () => set({ booklet: null, photos: [] }),
       edit: (fn) =>
         set((s) => {
@@ -158,22 +159,22 @@ export const useEditor = create<EditorState>()(
           s.sel = { surface: i, page: 'left', slot: null };
           if (!src) return;
           const photo = s.photos.find((p) => p.id === src.photoId);
-          sp.left = newPage('P1-full');
-          sp.right = newPage('P1-full');
+          sp.left = { ...newPage('P1'), bleed: true };
+          sp.right = { ...newPage('P1'), bleed: true };
           if (!photo) return;
           const { w, h } = b.pageSize;
           const spc = resolveSpacing(b.spacing, sp.spacing, sp.full.spacing);
-          const fullLayout = getLayout(sp.full.layoutId);
-          // el recuadro real: en las proporciones centradas es menor que la caja de márgenes
-          const fullBox = layoutToRects(fullLayout, layoutBox(fullLayout, 'full', w, h, spc, b.bleed), spc.gap)[src.slot];
+          const { layout: fullLayout, ...fullLook } = pageLook(sp.full);
+          // el recuadro real: con proporción o tamaño reducido es menor que la caja de márgenes
+          const fullBox = pageRects(fullLayout, fullLook, 'full', w, h, spc, b.bleed)[src.slot];
           const pano = placePhoto(fullBox, photo, src);
-          const halfBox = layoutBox(getLayout('P1-full'), 'left', w, h, spc, b.bleed);
-          const halfBase = placePhoto(halfBox, photo, { ...src, offsetX: 0, offsetY: 0, scale: 1 });
+          const half = (side: 'left' | 'right') => pageRects(getLayout('P1'), { ...DEFAULT_LOOK, bleed: true }, side, w, h, spc, b.bleed)[0];
+          const halfBase = placePhoto(half('left'), photo, { ...src, offsetX: 0, offsetY: 0, scale: 1 });
           const scale = pano.rw / halfBase.rw;
           const cx = fullBox.x + pano.cx; // centro de la foto en coordenadas de la doble
           const cy = fullBox.y + pano.cy;
           for (const side of ['left', 'right'] as const) {
-            const box = layoutBox(getLayout('P1-full'), side, w, h, spc, b.bleed);
+            const box = half(side);
             sp[side].frames[0] = {
               ...src,
               slot: 0,
@@ -195,10 +196,12 @@ export const useEditor = create<EditorState>()(
         set((s) => {
           const sp = surf(s.booklet!, key);
           const old = sp[page];
-          // conserva las fotos por orden de recuadro
-          sp[page] = { ...newPage(layoutId, old.frames), spacing: old.spacing };
+          // conserva las fotos por orden de recuadro, y el tamaño y la posición
+          sp[page] = { ...newPage(layoutId, old.frames), spacing: old.spacing, bleed: old.bleed, scale: old.scale, align: old.align };
           s.sel.slot = null;
         }),
+      setLook: (key, page, patch) =>
+        set((s) => void Object.assign(surf(s.booklet!, key)[page], patch)),
       placePhotoIn: (t, photoId) =>
         set((s) => {
           const f = frameAt(s.booklet!, t);

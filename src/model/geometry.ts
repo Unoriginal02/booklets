@@ -1,6 +1,6 @@
-import { getLayout } from './layouts';
+import { MIN_LOOK_SCALE, pageLook } from './layouts';
 import { centerIndex, isForcedBlank } from './imposition';
-import type { Booklet, Frame, Layout, PageKey, Rect, Spacing, Spread, SurfaceKey } from './types';
+import type { Booklet, Frame, Layout, Look, PageKey, Rect, Spacing, Spread, SurfaceKey } from './types';
 
 export const MM_PER_INCH = 25.4;
 export const LOW_PPI = 200;
@@ -19,24 +19,59 @@ export function resolveSpacing(global: Spacing, spread?: Partial<Spacing>, page?
   return out;
 }
 
+/** La página (o la doble entera) hasta el corte, en coordenadas de la doble. */
+export function trimBox(page: PageKey, pageW: number, pageH: number): Rect {
+  return { x: page === 'right' ? pageW : 0, y: 0, w: page === 'full' ? 2 * pageW : pageW, h: pageH };
+}
+
 /**
- * Caja de composición en coordenadas de la doble (ancho 2w): la página izquierda
+ * Caja de márgenes en coordenadas de la doble (ancho 2w): la página izquierda
  * ocupa [0, w] y la derecha [w, 2w]. El exterior/interior se reflejan solos.
  */
-export function layoutBox(layout: Layout, page: PageKey, pageW: number, pageH: number, sp: Spacing, bleed: number): Rect {
+export function marginBox(page: PageKey, pageW: number, pageH: number, sp: Spacing): Rect {
+  if (page === 'full') return { x: sp.outer, y: sp.top, w: 2 * pageW - 2 * sp.outer, h: pageH - sp.top - sp.bottom };
   const x0 = page === 'right' ? pageW : 0;
-  if (page === 'full') {
-    if (layout.bleed) return { x: -bleed, y: -bleed, w: 2 * pageW + 2 * bleed, h: pageH + 2 * bleed };
-    return { x: sp.outer, y: sp.top, w: 2 * pageW - 2 * sp.outer, h: pageH - sp.top - sp.bottom };
-  }
-  if (layout.bleed) {
-    // a sangre: se extiende por arriba, abajo y el borde de corte, pero no cruza el lomo
-    const x = page === 'left' ? -bleed : x0;
-    return { x, y: -bleed, w: pageW + bleed, h: pageH + 2 * bleed };
-  }
   const left = page === 'left' ? sp.outer : sp.inner;
   const right = page === 'left' ? sp.inner : sp.outer;
   return { x: x0 + left, y: sp.top, w: pageW - left - right, h: pageH - sp.top - sp.bottom };
+}
+
+/**
+ * El hueco de la composición dentro de `avail`: con la proporción fija, si la tiene,
+ * reducido según el tamaño, centrado en horizontal y alineado en vertical.
+ */
+export function contentBox(avail: Rect, aspect: number | undefined, look: Look): Rect {
+  const base = aspect ? fitAspect(avail, aspect) : avail;
+  const s = look.bleed ? 1 : Math.min(1, Math.max(MIN_LOOK_SCALE, look.scale));
+  const w = base.w * s;
+  const h = base.h * s;
+  const free = avail.h - h;
+  const y = avail.y + (look.align === 'start' ? 0 : look.align === 'end' ? free : free / 2);
+  return { x: avail.x + (avail.w - w) / 2, y, w, h };
+}
+
+/** A sangre, lo que toca el corte se alarga hasta el sangrado. El lomo de una página no cuenta como corte. */
+function bleedOut(r: Rect, trim: Rect, page: PageKey, bleed: number): Rect {
+  const eps = 0.01;
+  const l = r.x <= trim.x + eps && page !== 'right' ? bleed : 0;
+  const rt = r.x + r.w >= trim.x + trim.w - eps && page !== 'left' ? bleed : 0;
+  const t = r.y <= trim.y + eps ? bleed : 0;
+  const b = r.y + r.h >= trim.y + trim.h - eps ? bleed : 0;
+  return { x: r.x - l, y: r.y - t, w: r.w + l + rt, h: r.h + t + b };
+}
+
+/** Los recuadros de una página (o de la doble entera) con su plantilla, tamaño y posición. */
+export function pageRects(layout: Layout, look: Look, page: PageKey, pageW: number, pageH: number, sp: Spacing, bleed: number): Rect[] {
+  const trim = trimBox(page, pageW, pageH);
+  const avail = look.bleed ? trim : marginBox(page, pageW, pageH, sp);
+  const rects = layoutToRects(layout, contentBox(avail, layout.aspect, look), sp.gap);
+  return look.bleed ? rects.map((r) => bleedOut(r, trim, page, bleed)) : rects;
+}
+
+/** Cuánto alto le sobra a la composición: si es 0, la posición no cambia nada. */
+export function verticalSlack(layout: Layout, look: Look, page: PageKey, pageW: number, pageH: number, sp: Spacing): number {
+  const avail = look.bleed ? trimBox(page, pageW, pageH) : marginBox(page, pageW, pageH, sp);
+  return avail.h - contentBox(avail, layout.aspect, look).h;
 }
 
 /** Reparte una pista: la calle solo se pone entre recuadros que se tocan de verdad. */
@@ -69,9 +104,8 @@ export function layoutToRects(layout: Layout, box: Rect, gap: number): Rect[] {
   const colStarts = new Set(layout.cells.map((c) => c.col));
   const rowEnds = new Set(layout.cells.map((c) => c.row + c.rowSpan - 1));
   const rowStarts = new Set(layout.cells.map((c) => c.row));
-  const g = layout.bleed ? 0 : gap;
-  const tc = tracks(cols, box.w, g, colEnds, colStarts);
-  const tr = tracks(rows, box.h, g, rowEnds, rowStarts);
+  const tc = tracks(cols, box.w, gap, colEnds, colStarts);
+  const tr = tracks(rows, box.h, gap, rowEnds, rowStarts);
   return layout.cells.map((cell) => {
     const lastC = cell.col + cell.colSpan - 1;
     const lastR = cell.row + cell.rowSpan - 1;
@@ -99,9 +133,7 @@ export interface PlacedFrame {
 
 export interface SurfacePage {
   page: PageKey;
-  layout: Layout;
   spacing: Spacing;
-  box: Rect;
   frames: PlacedFrame[];
   blank: boolean;
 }
@@ -114,11 +146,10 @@ export function surfacePages(b: Booklet, key: SurfaceKey): SurfacePage[] {
   const { w, h } = b.pageSize;
   return keys.map((pk) => {
     const page = s[pk];
-    const layout = getLayout(page.layoutId);
+    const { layout, ...look } = pageLook(page);
     const spacing = resolveSpacing(b.spacing, s.spacing, page.spacing);
-    const box = layoutBox(layout, pk, w, h, spacing, b.bleed);
     const blank = pk !== 'full' && isForcedBlank(b, key, pk);
-    const rects = blank ? [] : layoutToRects(layout, box, spacing.gap);
+    const rects = blank ? [] : pageRects(layout, look, pk, w, h, spacing, b.bleed);
     const frames = rects.map((rect, slot) => ({
       surface: key,
       page: pk,
@@ -126,7 +157,7 @@ export function surfacePages(b: Booklet, key: SurfaceKey): SurfacePage[] {
       rect,
       frame: page.frames[slot] ?? newFrame(slot),
     }));
-    return { page: pk, layout, spacing, box, frames, blank };
+    return { page: pk, spacing, frames, blank };
   });
 }
 

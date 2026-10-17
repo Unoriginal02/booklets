@@ -286,45 +286,6 @@ function fromSimulation(spec: SimSpec): ZineMethod {
 
 const rect = (x: number, y: number, w: number, h: number): Rect => ({ x, y, w, h });
 
-function accordion(id: string, n: number, sides: 1 | 2): ZineMethod {
-  const trim = trimFor('landscape');
-  const w = trim.w / n;
-  const total = n * sides;
-  // cerrado en zigzag, la contraportada es la última cara del frente (n par) o el reverso del último panel (n impar)
-  const back = sides === 1 || n % 2 === 0 ? n : n + 1;
-  const name = (k: number) => (k === 1 ? 'Portada' : k === back ? 'Contraportada' : k > n ? `Reverso ${k - n}` : `Panel ${k}`);
-  const panels: ZinePanel[] = [];
-  for (let s = 0; s < sides; s++) {
-    for (let i = 0; i < n; i++) {
-      const num = s * n + i + 1;
-      panels.push({ side: s as 0 | 1, rect: rect(i * w, 0, w, trim.h), num, name: name(num), rot: 0 });
-    }
-  }
-  return {
-    id,
-    name: n === 3 ? 'Zigzag (Z)' : sides === 1 ? 'Acordeón a una cara' : 'Acordeón a doble cara',
-    summary:
-      n === 3
-        ? 'Tres paneles plegados en Z. Se abre como un folleto que se despliega hacia un lado.'
-        : sides === 1
-          ? 'Una tira de paneles que se despliega como un acordeón. Solo se imprime una cara.'
-          : 'Una tira que se despliega como un acordeón y sigue por el reverso.',
-    sides,
-    orientation: 'landscape',
-    trim,
-    pages: total,
-    panels,
-    lines: gridLines(n, 1, trim.w, trim.h),
-    steps: [
-      sides === 1 ? 'Imprime a una cara, al 100 %, y recorta la hoja por las marcas de corte.' : 'Imprime a doble cara, volteando por el borde corto, al 100 %. Recorta la hoja por las marcas de corte.',
-      'Pon la hoja con la cara A hacia arriba.',
-      'Dobla en zigzag: hacia atrás por el primer doblez, hacia delante por el siguiente, y así sucesivamente.',
-      'Cerrado, la portada (1) queda delante. Sin grapas.',
-    ],
-    tags: [`${total} caras`, `${Math.round(w)}×${trim.h} mm`, sides === 1 ? 'una cara' : 'doble cara', 'sin grapas'],
-  };
-}
-
 function minizine(): ZineMethod {
   const trim = trimFor('landscape');
   const w = trim.w / 4;
@@ -360,76 +321,6 @@ function minizine(): ZineMethod {
       'Sigue empujando hasta formar una cruz de cuatro alas y ciérrala como un librito con la portada (1) delante.',
     ],
     tags: ['8 páginas', `${w}×${h} mm`, 'una cara', '1 corte', 'sin grapas'],
-  };
-}
-
-function triptico(): ZineMethod {
-  const trim = trimFor('landscape');
-  // el panel que se mete dentro es 3 mm más estrecho para que cierre plano
-  const flap = 88;
-  const wide = (trim.w - flap) / 2;
-  return {
-    id: 'triptico-6',
-    name: 'Tríptico envolvente (C)',
-    summary: 'Tres paneles: el derecho se mete dentro y el izquierdo lo tapa. El folleto de toda la vida.',
-    sides: 2,
-    orientation: 'landscape',
-    trim,
-    pages: 6,
-    panels: [
-      { side: 0, rect: rect(0, 0, flap, trim.h), num: 3, name: 'Solapa · se ve al abrir', rot: 0 },
-      { side: 0, rect: rect(flap, 0, wide, trim.h), num: 6, name: 'Contraportada', rot: 0 },
-      { side: 0, rect: rect(flap + wide, 0, wide, trim.h), num: 1, name: 'Portada', rot: 0 },
-      { side: 1, rect: rect(0, 0, wide, trim.h), num: 2, name: 'Interior izquierdo', rot: 0 },
-      { side: 1, rect: rect(wide, 0, wide, trim.h), num: 4, name: 'Interior central', rot: 0 },
-      { side: 1, rect: rect(2 * wide, 0, flap, trim.h), num: 5, name: 'Interior derecho', rot: 0 },
-    ],
-    lines: [
-      { x1: flap, y1: 0, x2: flap, y2: trim.h, kind: 'fold' },
-      { x1: flap + wide, y1: 0, x2: flap + wide, y2: trim.h, kind: 'fold' },
-    ],
-    steps: [
-      'Imprime a doble cara, volteando por el borde corto, al 100 %. Recorta la hoja por las marcas de corte.',
-      'Pon la hoja con la cara B (el interior) hacia arriba.',
-      'Dobla hacia dentro el panel derecho (5), el más estrecho.',
-      'Dobla el panel izquierdo (2) por encima. La portada (1) queda delante.',
-    ],
-    tags: ['6 caras', `${wide}×${trim.h} mm`, 'doble cara', 'sin grapas'],
-  };
-}
-
-function porton(): ZineMethod {
-  const trim = trimFor('landscape');
-  // las solapas, algo más estrechas que la mitad del centro, para que no choquen al cerrar
-  const flap = 66.5;
-  const mid = trim.w - 2 * flap;
-  return {
-    id: 'porton-6',
-    name: 'Portón (gatefold)',
-    summary: 'Dos solapas que se cierran hacia el centro como una puerta. La portada se parte entre las dos.',
-    sides: 2,
-    orientation: 'landscape',
-    trim,
-    pages: 6,
-    panels: [
-      { side: 0, rect: rect(0, 0, flap, trim.h), num: 2, name: 'Portada · mitad derecha', rot: 0 },
-      { side: 0, rect: rect(flap, 0, mid, trim.h), num: 6, name: 'Contraportada', rot: 0 },
-      { side: 0, rect: rect(flap + mid, 0, flap, trim.h), num: 1, name: 'Portada · mitad izquierda', rot: 0 },
-      { side: 1, rect: rect(0, 0, flap, trim.h), num: 3, name: 'Solapa izquierda', rot: 0 },
-      { side: 1, rect: rect(flap, 0, mid, trim.h), num: 4, name: 'Interior central', rot: 0 },
-      { side: 1, rect: rect(flap + mid, 0, flap, trim.h), num: 5, name: 'Solapa derecha', rot: 0 },
-    ],
-    lines: [
-      { x1: flap, y1: 0, x2: flap, y2: trim.h, kind: 'fold' },
-      { x1: flap + mid, y1: 0, x2: flap + mid, y2: trim.h, kind: 'fold' },
-    ],
-    steps: [
-      'Imprime a doble cara, volteando por el borde corto, al 100 %. Recorta la hoja por las marcas de corte.',
-      'Pon la hoja con la cara B (el interior) hacia arriba.',
-      'Dobla la solapa izquierda (3) hacia el centro, y luego la derecha (5). Las dos se encuentran en medio.',
-      'Cerrado, la portada se lee entera: la mitad izquierda (1) y la derecha (2). Ojo: en la hoja están en los extremos opuestos.',
-    ],
-    tags: ['6 caras', `${flap}+${mid}+${flap} mm`, 'doble cara', 'sin grapas'],
   };
 }
 
@@ -479,22 +370,6 @@ export const ZINE_METHODS: ZineMethod[] = [
     binding: 'No hace falta grapar ni cortar.',
     tags: ['4 páginas', '90×135 mm', 'una cara', 'sin grapas'],
   }),
-  fromSimulation({
-    id: 'diptico-4',
-    name: 'Díptico',
-    summary: 'La hoja doblada una vez por la mitad. Cuatro caras grandes.',
-    orientation: 'landscape',
-    cols: 2,
-    rows: 1,
-    folds: [{ axis: 'x', keep: 'low', over: false }],
-    binding: 'No hace falta grapar.',
-    tags: ['4 páginas', '135×180 mm', 'doble cara', 'sin grapas'],
-  }),
-  triptico(),
-  porton(),
-  accordion('zigzag-6', 3, 2),
-  accordion('acordeon-4', 4, 1),
-  accordion('acordeon-8', 4, 2),
 ];
 
 const BY_ID = new Map(ZINE_METHODS.map((m) => [m.id, m]));

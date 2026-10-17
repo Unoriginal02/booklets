@@ -1,4 +1,4 @@
-import type { Layout, LayoutCell } from './types';
+import type { Layout, LayoutCell, Look, Page } from './types';
 
 const c = (col: number, row: number, colSpan = 1, rowSpan = 1): LayoutCell => ({ col, row, colSpan, rowSpan });
 
@@ -15,30 +15,42 @@ const ones = (n: number) => Array.from({ length: n }, () => 1);
  * recalcula con los márgenes y la calle vigentes.
  */
 export const LAYOUTS: Layout[] = [
-  { id: 'P1-full', name: 'A sangre', scope: 'page', bleed: true, grid: { cols: [1], rows: [1] }, cells: [c(0, 0)], basic: true },
-  { id: 'P1-margen', name: 'Una grande con margen', scope: 'page', bleed: false, grid: { cols: [1], rows: [1] }, cells: [c(0, 0)], basic: true },
-  { id: 'P1-centro', name: 'Una centrada pequeña (60 %)', scope: 'page', bleed: false, grid: { cols: [2, 6, 2], rows: [2, 6, 2] }, cells: [c(1, 1)], basic: true },
-  { id: 'P1-alta', name: 'Una vertical estrecha centrada', scope: 'page', bleed: false, grid: { cols: [1, 2, 1], rows: [1] }, cells: [c(1, 0)] },
-  { id: 'P1-arriba', name: 'Una arriba + espacio para pie', scope: 'page', bleed: false, grid: { cols: [1], rows: [3, 1] }, cells: [c(0, 0)] },
-  { id: 'P2-v', name: 'Dos apiladas', scope: 'page', bleed: false, grid: { cols: [1], rows: [1, 1] }, cells: grid(1, 2), basic: true },
-  { id: 'P2-h', name: 'Dos lado a lado', scope: 'page', bleed: false, grid: { cols: [1, 1], rows: [1] }, cells: grid(2, 1) },
-  { id: 'P2-asim', name: 'Grande + pequeña (2/3 · 1/3)', scope: 'page', bleed: false, grid: { cols: [1], rows: [2, 1] }, cells: grid(1, 2) },
-  { id: 'P2-diag', name: 'Dos en diagonal, desplazadas', scope: 'page', bleed: false, grid: { cols: [1, 1, 1], rows: [1, 1] }, cells: [c(0, 0, 2), c(1, 1, 2)] },
-  { id: 'P3-1+2', name: 'Una grande arriba, dos abajo', scope: 'page', bleed: false, grid: { cols: [1, 1], rows: [3, 2] }, cells: [c(0, 0, 2), c(0, 1), c(1, 1)], basic: true },
-  { id: 'P3-2+1', name: 'Dos arriba, una grande abajo', scope: 'page', bleed: false, grid: { cols: [1, 1], rows: [2, 3] }, cells: [c(0, 0), c(1, 0), c(0, 1, 2)] },
-  { id: 'P3-col', name: 'Grande a la izquierda, dos a la derecha', scope: 'page', bleed: false, grid: { cols: [2, 1], rows: [1, 1] }, cells: [c(0, 0, 1, 2), c(1, 0), c(1, 1)] },
-  { id: 'P3-tira', name: 'Tres en tira vertical', scope: 'page', bleed: false, grid: { cols: [1], rows: [1, 1, 1] }, cells: grid(1, 3) },
-  { id: 'P4-grid', name: 'Rejilla 2×2', scope: 'page', bleed: false, grid: { cols: [1, 1], rows: [1, 1] }, cells: grid(2, 2), basic: true },
-  { id: 'P4-1+3', name: 'Una grande + tres en fila', scope: 'page', bleed: false, grid: { cols: [1, 1, 1], rows: [3, 1] }, cells: [c(0, 0, 3), c(0, 1), c(1, 1), c(2, 1)] },
-  { id: 'P6-grid', name: 'Rejilla 2×3', scope: 'page', bleed: false, grid: { cols: [1, 1], rows: [1, 1, 1] }, cells: grid(2, 3) },
-  { id: 'P9-contacto', name: 'Hoja de contactos 3×3', scope: 'page', bleed: false, grid: { cols: ones(3), rows: ones(3) }, cells: grid(3, 3) },
-  { id: 'P0-vacia', name: 'Página en blanco', scope: 'page', bleed: false, grid: { cols: [1], rows: [1] }, cells: [], basic: true },
+  { id: 'P1', name: 'Página', scope: 'page', grid: { cols: [1], rows: [1] }, cells: [c(0, 0)] },
+  { id: 'P2-v', name: 'Dos apiladas', scope: 'page', grid: { cols: [1], rows: [1, 1] }, cells: grid(1, 2) },
+  { id: 'P2-h', name: 'Dos lado a lado', scope: 'page', grid: { cols: [1, 1], rows: [1] }, cells: grid(2, 1) },
+  { id: 'P2-asim', name: 'Grande + pequeña (2/3 · 1/3)', scope: 'page', grid: { cols: [1], rows: [2, 1] }, cells: grid(1, 2) },
+  { id: 'P2-diag', name: 'Dos en diagonal, desplazadas', scope: 'page', grid: { cols: [1, 1, 1], rows: [1, 1] }, cells: [c(0, 0, 2), c(1, 1, 2)] },
+  { id: 'P3-1+2', name: 'Una grande arriba, dos abajo', scope: 'page', grid: { cols: [1, 1], rows: [3, 2] }, cells: [c(0, 0, 2), c(0, 1), c(1, 1)] },
+  { id: 'P3-2+1', name: 'Dos arriba, una grande abajo', scope: 'page', grid: { cols: [1, 1], rows: [2, 3] }, cells: [c(0, 0), c(1, 0), c(0, 1, 2)] },
+  { id: 'P3-col', name: 'Grande a la izquierda, dos a la derecha', scope: 'page', grid: { cols: [2, 1], rows: [1, 1] }, cells: [c(0, 0, 1, 2), c(1, 0), c(1, 1)] },
+  { id: 'P3-tira', name: 'Tres en tira vertical', scope: 'page', grid: { cols: [1], rows: [1, 1, 1] }, cells: grid(1, 3) },
+  { id: 'P4-grid', name: 'Rejilla 2×2', scope: 'page', grid: { cols: [1, 1], rows: [1, 1] }, cells: grid(2, 2) },
+  { id: 'P4-1+3', name: 'Una grande + tres en fila', scope: 'page', grid: { cols: [1, 1, 1], rows: [3, 1] }, cells: [c(0, 0, 3), c(0, 1), c(1, 1), c(2, 1)] },
+  { id: 'P6-grid', name: 'Rejilla 2×3', scope: 'page', grid: { cols: [1, 1], rows: [1, 1, 1] }, cells: grid(2, 3) },
+  { id: 'P9-contacto', name: 'Hoja de contactos 3×3', scope: 'page', grid: { cols: ones(3), rows: ones(3) }, cells: grid(3, 3) },
+  { id: 'P0-vacia', name: 'Página en blanco', scope: 'page', grid: { cols: [1], rows: [1] }, cells: [] },
 
-  { id: 'D1-pano', name: 'Panorámica a sangre', scope: 'spread', bleed: true, grid: { cols: [1], rows: [1] }, cells: [c(0, 0)] },
-  { id: 'D1-pano-margen', name: 'Panorámica con margen', scope: 'spread', bleed: false, grid: { cols: [1], rows: [1] }, cells: [c(0, 0)] },
-  { id: 'D2-pano+1', name: 'Panorámica + una pequeña encima', scope: 'spread', bleed: false, grid: { cols: ones(4), rows: [1, 2] }, cells: [c(0, 1, 4), c(2, 0)] },
-  { id: 'D3-tira', name: 'Tira horizontal de 3 cruzando el lomo', scope: 'spread', bleed: false, grid: { cols: ones(3), rows: [1, 2, 1] }, cells: [c(0, 1), c(1, 1), c(2, 1)] },
+  { id: 'D1', name: 'Doble entera', scope: 'spread', grid: { cols: [1], rows: [1] }, cells: [c(0, 0)] },
+  { id: 'D2-pano+1', name: 'Panorámica + una pequeña encima', scope: 'spread', grid: { cols: ones(4), rows: [1, 2] }, cells: [c(0, 1, 4), c(2, 0)] },
+  { id: 'D3-tira', name: 'Tira horizontal de 3 cruzando el lomo', scope: 'spread', grid: { cols: ones(3), rows: [1, 2, 1] }, cells: [c(0, 1), c(1, 1), c(2, 1)] },
 ];
+
+/** Una foto que ocupa toda la caja: la proporción de la propia página (o de la doble). */
+export const PAGE_FILL: Record<'page' | 'spread', string> = { page: 'P1', spread: 'D1' };
+
+/**
+ * Plantillas de antes, que mezclaban la forma con el tamaño. Al abrir un librito
+ * antiguo se convierten en la plantilla nueva más su tamaño y posición.
+ */
+export const LEGACY_LAYOUTS: Record<string, { id: string } & Partial<Look>> = {
+  'P1-full': { id: 'P1', bleed: true },
+  'P1-margen': { id: 'P1' },
+  'P1-centro': { id: 'P1', scale: 0.6 },
+  'P1-alta': { id: 'R-3x1-v' },
+  'P1-arriba': { id: 'R-5x4-v', align: 'start' },
+  'D1-pano': { id: 'D1', bleed: true },
+  'D1-pano-margen': { id: 'D1' },
+};
 
 export type Orientation = 'v' | 'h';
 export type RatioGroup = 'foto' | 'cine' | 'ultra';
@@ -109,7 +121,6 @@ const one = (id: string, name: string, scope: 'page' | 'spread', aspect: number)
   id,
   name,
   scope,
-  bleed: false,
   grid: { cols: [1], rows: [1] },
   cells: [c(0, 0)],
   aspect,
@@ -133,12 +144,31 @@ export function getLayout(id: string): Layout {
   return BY_ID.get(id) ?? BY_ID.get('P0-vacia')!;
 }
 
-export const PAGE_LAYOUTS = LAYOUTS.filter((l) => l.scope === 'page' && !l.aspect);
-export const RATIO_LAYOUTS = LAYOUTS.filter((l) => l.scope === 'page' && l.aspect);
-export const SPREAD_LAYOUTS = LAYOUTS.filter((l) => l.scope === 'spread' && !l.aspect);
-
-/** En la cubierta la doble completa se presenta como "envolvente". */
-export const COVER_FULL_NAMES: Record<string, string> = {
-  'D1-pano': 'Envolvente: contra y portada a sangre',
-  'D1-pano-margen': 'Envolvente con margen',
+/** Composiciones de varias fotos (y la página en blanco). */
+export const MULTI_LAYOUTS: Record<'page' | 'spread', Layout[]> = {
+  page: LAYOUTS.filter((l) => l.scope === 'page' && !l.aspect && l.cells.length !== 1),
+  spread: LAYOUTS.filter((l) => l.scope === 'spread' && !l.aspect && l.cells.length !== 1),
 };
+export const RATIO_LAYOUTS = LAYOUTS.filter((l) => l.scope === 'page' && l.aspect);
+
+export const DEFAULT_LOOK: Look = { bleed: false, scale: 1, align: 'center' };
+export const MIN_LOOK_SCALE = 0.2;
+
+/** La plantilla de una página y su tamaño y posición, contando con las plantillas antiguas. */
+export function pageLook(p: Page): Look & { layout: Layout } {
+  const old = LEGACY_LAYOUTS[p.layoutId];
+  return {
+    layout: getLayout(old?.id ?? p.layoutId),
+    bleed: p.bleed ?? old?.bleed ?? DEFAULT_LOOK.bleed,
+    scale: p.scale ?? old?.scale ?? DEFAULT_LOOK.scale,
+    align: p.align ?? old?.align ?? DEFAULT_LOOK.align,
+  };
+}
+
+/** Pasa una página con plantilla antigua a la nueva, sin tocar las fotos. */
+export function upgradePage(p: Page): Page {
+  const old = LEGACY_LAYOUTS[p.layoutId];
+  if (!old) return p;
+  const { layout, ...look } = pageLook(p);
+  return { ...p, ...look, layoutId: layout.id };
+}

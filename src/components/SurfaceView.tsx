@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { layoutBox, surfacePages, type SurfacePage } from '../model/geometry';
-import type { Booklet, Layout, Photo, SurfaceKey } from '../model/types';
+import { marginBox, surfacePages, type SurfacePage } from '../model/geometry';
+import type { Booklet, Photo, SurfaceKey } from '../model/types';
 import { PhotoImg } from './PhotoImg';
 import { FrameView } from './FrameView';
 import { useEditor } from '../store/editor';
@@ -15,8 +15,6 @@ interface Props {
   guides?: boolean;
   thumb?: boolean;
 }
-
-const NO_BLEED = { bleed: false } as Layout;
 
 function SurfaceViewImpl({ booklet, surface, k, photos, interactive, guides, thumb }: Props) {
   const { w, h } = booklet.pageSize;
@@ -52,7 +50,7 @@ function SurfaceViewImpl({ booklet, surface, k, photos, interactive, guides, thu
       {guides &&
         pages.map((p) => {
           if (p.blank) return null;
-          const r = layoutBox(NO_BLEED, p.page, w, h, p.spacing, booklet.bleed);
+          const r = marginBox(p.page, w, h, p.spacing);
           return (
             <div
               key={`g-${p.page}`}

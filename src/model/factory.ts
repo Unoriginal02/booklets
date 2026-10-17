@@ -1,4 +1,4 @@
-import { getLayout } from './layouts';
+import { getLayout, upgradePage } from './layouts';
 import { newFrame } from './geometry';
 import type { Booklet, Frame, Page, Spacing, Spread } from './types';
 
@@ -32,8 +32,8 @@ export function newPage(layoutId: string, old?: Frame[]): Page {
   return { layoutId, frames: Array.from({ length: n }, (_, i) => (old?.[i] ? { ...old[i], slot: i } : newFrame(i))) };
 }
 
-export function newSpread(left = 'P1-margen', right = 'P1-margen'): Spread {
-  return { id: uid(), mode: 'pages', left: newPage(left), right: newPage(right), full: newPage('D1-pano') };
+export function newSpread(left = 'P1', right = 'P1'): Spread {
+  return { id: uid(), mode: 'pages', left: newPage(left), right: newPage(right), full: { ...newPage('D1'), bleed: true } };
 }
 
 export function blankSpread(): Spread {
@@ -42,7 +42,8 @@ export function blankSpread(): Spread {
 
 export function newBooklet(title: string, formatId: string): Booklet {
   const fmt = getFormat(formatId);
-  const cover = newSpread('P0-vacia', 'P1-full');
+  const cover = newSpread('P0-vacia', 'P1');
+  cover.right.bleed = true;
   return {
     id: uid(),
     title,
@@ -74,4 +75,10 @@ export function paperName(w: number, h: number): string {
 export function newZine(title: string, methodId: string): Booklet {
   // reutiliza la estructura del librito; el fanzine solo usa `zine`
   return { ...newBooklet(title, 'a6'), kind: 'zine', zine: { methodId, margin: 0, frames: {} } };
+}
+
+/** Libritos guardados con las plantillas de antes: las pasa a plantilla + tamaño + posición. */
+export function upgradeBooklet(b: Booklet): Booklet {
+  const sp = (s: Spread): Spread => ({ ...s, left: upgradePage(s.left), right: upgradePage(s.right), full: upgradePage(s.full) });
+  return { ...b, cover: sp(b.cover), spreads: b.spreads.map(sp) };
 }
